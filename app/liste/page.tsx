@@ -10,7 +10,7 @@ import { useReservations, deleteReservation, updateReservationStatus } from '@/h
 import { Navigation } from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
 import { SkeletonTable } from '@/components/ui/Skeleton';
-import { PlusIcon, PencilIcon, TrashIcon, CheckCircleIcon, UserIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, TrashIcon, CheckCircleIcon, UserIcon, MagnifyingGlassIcon, CalendarDaysIcon } from '@heroicons/react/24/outline';
 import { Reservation } from '@/types/reservation';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -23,6 +23,7 @@ export default function ListePage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [showPastReservations, setShowPastReservations] = useState(false);
 
   // Mettre à jour l'heure actuelle chaque minute pour recalculer les retards
   useEffect(() => {
@@ -79,7 +80,10 @@ export default function ListePage() {
   const filteredReservations = useMemo(() => {
     if (!reservations) return [];
 
-    let filtered = reservations.filter(r => r.date >= today);
+    // Filtrer par date selon le toggle
+    let filtered = showPastReservations
+      ? reservations
+      : reservations.filter(r => r.date >= today);
 
     // Appliquer la recherche
     if (searchQuery.trim()) {
@@ -92,7 +96,7 @@ export default function ListePage() {
     }
 
     return filtered;
-  }, [reservations, today, searchQuery]);
+  }, [reservations, today, searchQuery, showPastReservations]);
 
   // Grouper les réservations par date
   const reservationsByDate = useMemo(() => {
@@ -110,9 +114,14 @@ export default function ListePage() {
       reservations.sort((a, b) => a.heure.localeCompare(b.heure));
     });
 
-    // Retourner les dates triées
-    return Array.from(grouped.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [filteredReservations]);
+    // Séparer les dates futures/aujourd'hui et les dates passées
+    const entries = Array.from(grouped.entries());
+    const futureEntries = entries.filter(([date]) => date >= today).sort((a, b) => a[0].localeCompare(b[0]));
+    const pastEntries = entries.filter(([date]) => date < today).sort((a, b) => b[0].localeCompare(a[0]));
+
+    // Retourner futures en premier, puis passées
+    return [...futureEntries, ...pastEntries];
+  }, [filteredReservations, today]);
 
   // Handler pour la suppression
   const handleDelete = async (id: string) => {
@@ -191,7 +200,7 @@ export default function ListePage() {
         </div>
 
         {/* Barre de recherche */}
-        <div className="mb-6">
+        <div className="mb-6 space-y-4">
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <MagnifyingGlassIcon className="h-5 w-5 text-slate-400" />
@@ -204,6 +213,19 @@ export default function ListePage() {
               className="block w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-lg leading-5 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all sm:text-sm shadow-sm"
             />
           </div>
+
+          {/* Toggle pour afficher les anciennes réservations */}
+          <button
+            onClick={() => setShowPastReservations(!showPastReservations)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+              showPastReservations
+                ? 'bg-indigo-600 text-white shadow-md hover:bg-indigo-700'
+                : 'bg-white text-slate-600 border border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
+            }`}
+          >
+            <CalendarDaysIcon className="w-5 h-5" />
+            <span>{showPastReservations ? 'Masquer les anciennes réservations' : 'Afficher les anciennes réservations'}</span>
+          </button>
         </div>
 
         {/* Loading State */}
@@ -220,11 +242,13 @@ export default function ListePage() {
         {!isLoading && !isError && filteredReservations.length === 0 && (
           <div className="bg-white rounded-lg shadow border border-slate-200 p-12 text-center">
             <h3 className="text-lg font-medium text-slate-900 mb-2">
-              {searchQuery.trim() ? 'Aucune réservation trouvée' : 'Aucune réservation à venir'}
+              {searchQuery.trim() ? 'Aucune réservation trouvée' : showPastReservations ? 'Aucune réservation' : 'Aucune réservation à venir'}
             </h3>
             <p className="text-slate-500 mb-4">
               {searchQuery.trim()
                 ? 'Essayez de modifier votre recherche.'
+                : showPastReservations
+                ? 'Commencez par créer votre première réservation.'
                 : 'Commencez par créer votre première réservation.'}
             </p>
             {!searchQuery.trim() && (
@@ -241,15 +265,20 @@ export default function ListePage() {
           <div className="space-y-6">
             {reservationsByDate.map(([date, dayReservations]) => {
               const isToday = date === today;
+              const isPast = date < today;
               return (
                 <div key={date} className={`bg-white rounded-lg shadow-sm overflow-hidden ${
-                  isToday ? 'border-l-4 border-emerald-500' : 'border-l-4 border-slate-300'
+                  isToday 
+                    ? 'border-l-4 border-emerald-500' 
+                    : isPast 
+                    ? 'border-l-4 border-slate-200 opacity-75' 
+                    : 'border-l-4 border-slate-300'
                 }`}>
                   {/* En-tête de la date */}
                   <div className="p-4 border-b border-slate-100">
                     <div className="flex justify-between items-center">
                       <div>
-                        <h2 className="text-lg font-semibold text-slate-900">
+                        <h2 className={`text-lg font-semibold ${isPast ? 'text-slate-500' : 'text-slate-900'}`}>
                           {format(new Date(date), 'EEEE d MMMM yyyy', { locale: fr })}
                         </h2>
                         <p className="text-sm text-slate-500 mt-0.5">
@@ -259,6 +288,11 @@ export default function ListePage() {
                       {isToday && (
                         <span className="bg-emerald-500/10 text-emerald-700 text-xs font-medium px-3 py-1 rounded-full">
                           Aujourd'hui
+                        </span>
+                      )}
+                      {isPast && (
+                        <span className="bg-slate-500/10 text-slate-600 text-xs font-medium px-3 py-1 rounded-full">
+                          Passé
                         </span>
                       )}
                     </div>
